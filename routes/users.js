@@ -1,13 +1,17 @@
 const express = require('express');
+const { isEmpty } = require('lodash');
+const { ObjectId } = require('mongodb');
 const { getDB } = require('../config/mangoDB');
-const userSchema = require('../schemas/user-schema');
+const Users = require('../schemas/user-schema');
 const router = express.Router();
 
-const users = [
+const dummyUser = [
     { name: 'user1', id: 1 },
     { name: 'user2', id: 2 },
     { name: 'user3', id: 3 },
 ]
+
+const collectionName = 'users';
 
 //#region -----------start get--------------
     router.get('/', (req, res) => {
@@ -15,12 +19,11 @@ const users = [
     });
 
     router.get('/list', (req, res) => {
-        const db = getDB();
-        db.collection('users').find({}).toArray().then(data => {
-            // console.log('res =>', data)
-            res.send({ message: 'Data found', status: 200, data: data })
-        });
-        
+        getUserList().then(list => {
+            res.status(200).send({ message: !isEmpty(list) ? 'Data found' : 'Data not found', status: 200, data: list })
+        }).catch(err => {
+            res.status(400).send({ message: err, status: 400 })
+        })
     });
 
     // router.get('/users/:year/:month', (req, res) => {
@@ -32,32 +35,25 @@ const users = [
     // });
 
     router.get('/user-detail/:id', (req, res) => {
-        const user = users.find(u => u.id === parseInt(req.params.id));
-        if (!user) return res.status(404).send({ message: 'Record not found!', status: 404, data: null });
-        
-        res.status(200).send({ message: 'Record found!', status: 200, data: user });
+        getUserList({"_id": ObjectId(req.params.id)}).then(findedData => {
+            res.status(200).send({ message: !isEmpty(findedData) ? 'Data found' : 'Data not found', status: 200, data: findedData })
+        }).catch(err => {
+            res.status(400).send({ message: err, status: 400 })
+        })
     });
 //#endregion -----------end get---------------
 
 //#region -----------start post-------------
     router.post('/submit', (req, res) => {
-        console.log('req=========>', req.body)
-        const user = {
-            first_name: req.body.first_name,
-            last_name: req.body.last_name,
-            gender: req.body.gender,
-            father_name: req.body.father_name
-        };
+        const newUser = new Users(req.body);
 
-        new userSchema(user).save()
+        getDB().collection(collectionName).insertOne(newUser)
             .then(data=> {
                 res.json({message: 'Record added successfully', status: 200, data});
             })
             .catch(err => {
-                res.json({ message: err, status: 400 })
+                res.status(400).json({ message: "Unable to save to database", status: 400 });
             })
-
-        // res.status(200).send({ message: 'Record added successfully', status: 200, data: user });
     });
 //#endregion --------------end post----------------
 
@@ -67,31 +63,44 @@ const users = [
         if (validation.error) return res.status(400).send({ message: validation.error.details[0].message, status: 400, data: null });
 
         const user = {
-            id: users.length + 1,
+            id: dummyUser.length + 1,
             name: req.body.name
         };
-        users.push(user);
+        dummyUser.push(user);
         res.status(200).send({ message: 'Record added successfully', status: 200, data: user });
     });
 //#endregion -----------end input validation---------------
 
 //#region -----------start put--------------
-    router.put('/user-detail/:id', (req, res) => {
-        // Look up the users
-        // If not existing, return 404
-        const user = users.find(u => u.id === parseInt(req.params.id));
-        if (!user) return res.status(404).send({ message: 'Record not found!', status: 404, data: null });
-        
-        // Validate
-        // If invalid, return 400 - Bad request
-        const validation = validationUser(req.body);
-        if (validation.error) return res.status(400).send({ message: validation.error.details[0].message, status: 400, data: null });
+    router.put('/user-update/:id', (req, res) => {
+        (async () => {
+            // Look up the users
+            // If not existing, return 404
+            const findedUser = await getUserList({"_id": ObjectId(req.params.id)});
+            if (isEmpty(findedUser)) return res.status(404).send({ message: 'Record not found!', status: 404, data: null });
 
-        // Update users
-        // Return the updated users
-        user.name = req.body.name;
-        user.address = req.body.address;
-        res.status(200).send({ message: 'Record updated!', status: 200, data: user })    
+            // Validate
+            // If invalid, return 400 - Bad request
+            // const validation = validationUser(req.body);
+            // if (validation.error) return res.status(400).send({ message: validation.error.details[0].message, status: 400, data: null });
+
+            // Update
+            getDB().collection(collectionName).updateOne({"_id": ObjectId(req.params.id)}, req.body)
+                .then(data=> {
+                    res.json({message: 'Record updated successfully', status: 200, data});
+                })
+                .catch(err => {
+                    res.status(400).json({ message: "Unable to update", status: 400 });
+                })
+        })()
+
+        
+
+        // // Update users
+        // // Return the updated users
+        // user.name = req.body.name;
+        // user.address = req.body.address;
+        // res.status(200).send({ message: 'Record updated!', status: 200, data: user })    
     });
 //#endregion ------------end put---------------
 
@@ -99,12 +108,12 @@ const users = [
     router.delete('/user-delete/:id', (req, res) => {
         // Look up the user
         // Not exist, return 404
-        const user = users.find(u => u.id === parseInt(req.params.id));
+        const user = dummyUser.find(u => u.id === parseInt(req.params.id));
         if (!user) return res.status(404).send({ message: 'Record not found!', status: 404, data: null });
 
         // Delete
-        const index = users.indexOf(user);
-        users.splice(index, 1);
+        const index = dummyUser.indexOf(user);
+        dummyUser.splice(index, 1);
 
         // Return the same course
         res.status(200).send({ message: 'Record deleted!', status: 200, data: user });
@@ -113,11 +122,26 @@ const users = [
 
 function validationUser(user){
     const schema = Joi.object({
-        name: Joi.string().min(3).required(),
-        address: Joi.string().min(5).required()
+        first_name: Joi.string().min(3).required(),
+        last_name: Joi.string().min(3).required()
     });
 
     return schema.validate(user);
+}
+
+const getUserList = async (conditions) => {
+    let data = [];
+    await getDB().collection(collectionName).find(conditions || {}).toArray()
+            .then(res => {
+                data = res;
+            })
+            .catch(err => {
+                console.log('error', err);
+
+                data = []
+            });
+
+    return data;
 }
 
 module.exports = router;
