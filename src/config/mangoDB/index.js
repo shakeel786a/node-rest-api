@@ -11,7 +11,7 @@ const isMangoDBConnect = async () => {
   await client.connect();
   const db = client.db(process.env.DB_NAME);
   try {
-    console.log('DB connected.');
+    console.log('DB connected: ', process.env.DB_NAME);
     connectedDBInfo = db;
     return db;
   } catch (error) {
