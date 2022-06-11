@@ -2,7 +2,7 @@
   "name": "rest-api",
   "version": "1.0.0",
   "description": "A Node.js RESTful API Tutorial Project (Build a simple API)",
-  "main": "index.js",
+  "main": "./src/index.js",
   "scripts": {
     "youtubeLink": "https://www.youtube.com/watch?v=vjf774RKrLc",
     "start": "nodemon index.js"

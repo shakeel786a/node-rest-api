@@ -85,38 +85,42 @@ const collectionName = 'users';
             // if (validation.error) return res.status(400).send({ message: validation.error.details[0].message, status: 400, data: null });
 
             // Update
-            getDB().collection(collectionName).updateOne({"_id": ObjectId(req.params.id)}, req.body)
-                .then(data=> {
-                    res.json({message: 'Record updated successfully', status: 200, data});
-                })
-                .catch(err => {
-                    res.status(400).json({ message: "Unable to update", status: 400 });
-                })
-        })()
-
-        
-
-        // // Update users
-        // // Return the updated users
-        // user.name = req.body.name;
-        // user.address = req.body.address;
-        // res.status(200).send({ message: 'Record updated!', status: 200, data: user })    
+            try {
+                getDB().collection(collectionName).updateOne({_id: ObjectId(req.params.id)}, {$set:req.body}, { upsert: true })
+                    .then(data=> {
+                        res.json({message: 'Record updated successfully', status: 200, data});
+                    })
+                    .catch(err => {
+                        res.status(400).json({ message: "Unable to update", status: 400 });
+                    })
+            } catch(err) {
+                res.json({ message: err, status: 400 });
+            }
+        })()    
     });
 //#endregion ------------end put---------------
 
 //#region -----------start delete-----------
     router.delete('/user-delete/:id', (req, res) => {
-        // Look up the user
-        // Not exist, return 404
-        const user = dummyUser.find(u => u.id === parseInt(req.params.id));
-        if (!user) return res.status(404).send({ message: 'Record not found!', status: 404, data: null });
+        (async () => {
+            // Look up the users
+            // If not existing, return 404
+            const findedUser = await getUserList({"_id": ObjectId(req.params.id)});
+            if (isEmpty(findedUser)) return res.status(404).send({ message: 'Record not found!', status: 404, data: null });
 
-        // Delete
-        const index = dummyUser.indexOf(user);
-        dummyUser.splice(index, 1);
-
-        // Return the same course
-        res.status(200).send({ message: 'Record deleted!', status: 200, data: user });
+            // Delete
+            try {
+                getDB().collection(collectionName).deleteOne({_id: ObjectId(req.params.id)}, { upsert: true })
+                    .then(data=> {
+                        res.json({message: 'Record deleted successfully', status: 200, data});
+                    })
+                    .catch(err => {
+                        res.status(400).json({ message: "Unable to delete", status: 400 });
+                    })
+            } catch(err) {
+                res.json({ message: err, status: 400 });
+            }
+        })()
     });
 //#endregion ------------end delete--------------
 
